@@ -1,0 +1,30 @@
+# The SANDBOX image: where the agents' shell commands and file edits run.
+FROM python:3.12-slim
+
+# --- system packages (bash, git, coreutils are REQUIRED by the swarm tools) ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash git coreutils findutils grep sed curl ca-certificates \
+    ripgrep build-essential sqlite3 nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- non-root user matching DockerSandbox(user="1000:1000") ---
+RUN useradd -m -u 1000 -s /bin/bash agent \
+    && mkdir -p /workspace /home/agent/.local /home/agent/.npm-global \
+    && chown -R 1000:1000 /workspace /home/agent \
+    && git config --system --add safe.directory '*'
+
+# Switch to the non-root user so packages install correctly into agent's home directory
+USER agent
+WORKDIR /workspace
+
+# --- environment variables for user-space package installation ---
+ENV PIP_USER=1 \
+    PYTHONUSERBASE=/home/agent/.local \
+    NPM_CONFIG_PREFIX=/home/agent/.npm-global \
+    PATH=/home/agent/.local/bin:/home/agent/.npm-global/bin:$PATH
+
+# --- python packages the agents can use without installing ---
+RUN pip install --no-cache-dir pytest pytest-asyncio httpx requests fastapi "uvicorn[standard]" \
+    sqlalchemy pydantic ruff
+
+CMD ["sleep", "infinity"]
